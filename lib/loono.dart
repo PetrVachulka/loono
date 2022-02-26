@@ -25,7 +25,9 @@ class Loono extends StatelessWidget {
       stream: _auth.onAuthStateChanged,
       builder: (context, snapshot) {
         final authUser = snapshot.data;
-        if (authUser == null && !_appRouter.isPathActive('logout')) {
+        if (authUser == null &&
+            !_appRouter.isRouteActive(LogoutRoute.name) &&
+            !_appRouter.isRouteActive(AfterDeletionRoute.name)) {
           SchedulerBinding.instance?.addPostFrameCallback((_) {
             _appRouter.removeWhere((_) => true);
             // ignore: cascade_invocations

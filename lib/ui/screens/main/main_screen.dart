@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:loono/constants.dart';
 import 'package:loono/l10n/ext.dart';
+import 'package:loono/repositories/user_repository.dart';
 import 'package:loono/services/examinations_service.dart';
 import 'package:loono/ui/screens/about_health/about_health.dart';
 import 'package:loono/ui/screens/find_doctor/find_doctor.dart';
 import 'package:loono/ui/screens/prevention/prevention.dart';
+import 'package:loono/utils/registry.dart';
 import 'package:provider/provider.dart';
 
 /// Post-auth main screen.
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({Key? key, this.selectedIndex = 0}) : super(key: key);
+
+  final int selectedIndex;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -29,9 +33,12 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedIndex = widget.selectedIndex;
+
     WidgetsBinding.instance?.addPostFrameCallback(
       (_) => Provider.of<ExaminationsProvider>(context, listen: false).fetchExaminations(),
     );
+    registry.get<UserRepository>().sync();
   }
 
   @override
