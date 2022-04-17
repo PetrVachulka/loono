@@ -10,6 +10,8 @@ import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -55,12 +57,14 @@ Future<void> setup({
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
 
   final appInfo = await PackageInfo.fromPlatform();
   await dotenv.load(fileName: 'assets/.env');
 
   final defaultDioOptions = BaseOptions(
-    baseUrl: flavor == AppFlavors.dev ? 'https://app.devel.loono.cz' : 'https://app.prod.loono.cz',
+    baseUrl:
+        flavor == AppFlavors.dev ? 'https://app.devel.loono.cz/v1' : 'https://app.prod.loono.cz/v1',
     connectTimeout: 5000,
     receiveTimeout: 8000,
   );
@@ -157,6 +161,7 @@ Future<void> setup({
   );
 
   registry.registerSingleton<FirebaseAnalytics>(FirebaseAnalytics.instance);
+  await registry.get<FirebaseAnalytics>().setAnalyticsCollectionEnabled(!kDebugMode);
 
   registry.registerSingleton<LoonoApi>(LoonoApi(dio: dio));
 

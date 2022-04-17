@@ -12,8 +12,10 @@ import 'package:loono/ui/widgets/find_doctor/bottom_sheet_overlay.dart';
 import 'package:loono/ui/widgets/find_doctor/doctor_detail_sheet.dart';
 import 'package:loono/ui/widgets/find_doctor/main_search_text_field.dart';
 import 'package:loono/ui/widgets/find_doctor/map_preview.dart';
+import 'package:loono/ui/widgets/find_doctor/specialization_chips_list.dart';
 import 'package:loono/utils/map_utils.dart';
 import 'package:loono/utils/registry.dart';
+import 'package:loono_api/loono_api.dart';
 import 'package:provider/provider.dart';
 
 class FindDoctorScreen extends StatefulWidget {
@@ -34,23 +36,40 @@ class _FindDoctorScreenState extends State<FindDoctorScreen> {
 
   final healthcareProviderRepository = registry.get<HealthcareProviderRepository>();
 
+  late final MapStateService mapState;
+
   bool _isHealthCareProvidersInMapService = false;
 
-  Future<void> _setHealthcareProviders(MapStateService mapStateService) async {
-    final healthcareProviders =
-        await registry.get<HealthcareProviderRepository>().getHealthcareProviders();
-
-    if (healthcareProviders != null && healthcareProviders.isNotEmpty) {
-      mapStateService.addAll(healthcareProviders);
-      setState(() {
-        _isHealthCareProvidersInMapService = true;
+  Future<void> _setHealthcareProviders({bool tryFetchAgainData = false}) async {
+    if (mapState.allHealthcareProviders.isEmpty) {
+      final healthcareProviders = await healthcareProviderRepository.getHealthcareProviders();
+      if (healthcareProviders != null && healthcareProviders.isNotEmpty) {
+        mapState.addAll(healthcareProviders);
+        setState(() => _isHealthCareProvidersInMapService = true);
+      } else {
+        if (tryFetchAgainData) {
+          await healthcareProviderRepository.checkAndUpdateIfNeeded();
+        }
+      }
+    } else {
+      Future.delayed(Duration.zero, () async {
+        setState(() => _isHealthCareProvidersInMapService = true);
       });
     }
   }
 
   @override
+  void initState() {
+    super.initState();
+    mapState = context.read<MapStateService>();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final mapStateService = Provider.of<MapStateService>(context, listen: true);
+    final currDoctorDetail =
+        context.select<MapStateService, SimpleHealthcareProvider?>((value) => value.doctorDetail);
+    final currSpec =
+        context.select<MapStateService, SearchResult?>((value) => value.currSpecialization);
 
     return Scaffold(
       appBar: widget.cancelRouteName != null
@@ -70,29 +89,37 @@ class _FindDoctorScreenState extends State<FindDoctorScreen> {
           stream: healthcareProviderRepository.healtcareProvidersStream,
           initialData: healthcareProviderRepository.lastStreamValue,
           builder: (context, snapshot) {
-            if (snapshot.data == HealtCareSyncState.completed &&
+            final healthcareSyncState = snapshot.data;
+            if (healthcareSyncState == HealtCareSyncState.completed &&
                 !_isHealthCareProvidersInMapService) {
-              _setHealthcareProviders(mapStateService);
+              _setHealthcareProviders();
             }
             return Stack(
               children: [
                 MapPreview(mapController: _mapController),
-                if (_isHealthCareProvidersInMapService)
-                  SearchTextField(
-                    onItemTap: (searchResult) async {
-                      final provider = searchResult.data;
-                      if (provider == null) return;
-                      await animateToPos(
-                        _mapController,
-                        cameraPosition: CameraPosition(
-                          target: LatLng(provider.lat, provider.lng),
-                          zoom: searchResult.zoomLevel,
+                if (_isHealthCareProvidersInMapService) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Column(
+                      children: [
+                        SearchTextField(
+                          onItemTap: (searchResult) async {
+                            final provider = searchResult.data;
+                            if (provider == null) return;
+                            await animateToPos(
+                              _mapController,
+                              cameraPosition: CameraPosition(
+                                target: LatLng(provider.lat, provider.lng),
+                                zoom: searchResult.zoomLevel,
+                              ),
+                            );
+                            _sheetController.jumpTo(MapVariables.MIN_SHEET_SIZE);
+                          },
                         ),
-                      );
-                      _sheetController.jumpTo(MapVariables.MIN_SHEET_SIZE);
-                    },
+                        SpecializationChipsList(showDefaultSpecs: currSpec == null),
+                      ],
+                    ),
                   ),
-                if (_isHealthCareProvidersInMapService)
                   MapSheetOverlay(
                     onItemTap: (healthcareProvider) async => animateToPos(
                       _mapController,
@@ -102,31 +129,14 @@ class _FindDoctorScreenState extends State<FindDoctorScreen> {
                       ),
                     ),
                     sheetController: _sheetController,
-                    mapStateService: mapStateService,
                   ),
+                ],
                 if (!_isHealthCareProvidersInMapService)
-                  Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10.0),
-                          child: const LinearProgressIndicator(
-                            backgroundColor: Color.fromRGBO(104, 170, 123, 1),
-                            color: LoonoColors.greenSuccess,
-                            minHeight: 70,
-                            value: null,
-                          ),
-                        ),
-                        Text(
-                          'Načítám informace o lékařích ...',
-                          style: LoonoFonts.cardTitle.copyWith(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (mapStateService.doctorDetail != null)
+                  if (healthcareSyncState == HealtCareSyncState.error)
+                    _buildErrorIndicator()
+                  else
+                    _buildLoadingIndicator(),
+                if (currDoctorDetail != null)
                   Align(
                     alignment: Alignment.bottomCenter,
                     child: Container(
@@ -147,14 +157,77 @@ class _FindDoctorScreenState extends State<FindDoctorScreen> {
                       ),
                       height: 370,
                       child: DoctorDetailSheet(
-                        doctor: mapStateService.doctorDetail!,
-                        closeDetail: () => mapStateService.setDoctorDetail(null),
+                        doctor: currDoctorDetail,
+                        closeDetail: () =>
+                            mapState.setDoctorDetail(null, unblockOnMoveMapFiltering: false),
                       ),
                     ),
                   ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10.0),
+            child: const LinearProgressIndicator(
+              backgroundColor: Color.fromRGBO(104, 170, 123, 1),
+              color: LoonoColors.greenSuccess,
+              minHeight: 70,
+              value: null,
+            ),
+          ),
+          Text(
+            'Načítám informace o lékařích ...',
+            style: LoonoFonts.cardTitle.copyWith(color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorIndicator() {
+    return GestureDetector(
+      onTap: () => _setHealthcareProviders(tryFetchAgainData: true),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10.0),
+              child: const LinearProgressIndicator(
+                backgroundColor: LoonoColors.primaryWashed,
+                minHeight: 70,
+                value: 0,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Chyba při načítání dat o lékařích.',
+                      style: LoonoFonts.cardTitle.copyWith(color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.refresh, color: Colors.white),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

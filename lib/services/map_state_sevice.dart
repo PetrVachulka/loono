@@ -20,6 +20,8 @@ class MapStateService with ChangeNotifier {
 
   final List<SimpleHealthcareProvider> _currHealthcareProviders = <SimpleHealthcareProvider>[];
 
+  final List<SearchResult> _allSpecs = <SearchResult>[];
+
   final Set<Marker> _markers = <Marker>{};
 
   SimpleHealthcareProvider? doctorDetail;
@@ -31,6 +33,10 @@ class MapStateService with ChangeNotifier {
   List<SearchResult> searchResults = <SearchResult>[];
 
   List<SimpleHealthcareProvider> get allHealthcareProviders => _allHealthcareProviders;
+
+  List<SearchResult> get allSpecs => _allSpecs;
+
+  bool onMoveMapFilteringBlocked = false;
 
   /// Currently selected or visible healthcare providers.
   ///
@@ -45,13 +51,20 @@ class MapStateService with ChangeNotifier {
   ClusterManager _initClusterManager() => ClusterManager<HealthcareItemPlace>(
         <HealthcareItemPlace>[],
         updateMarkers,
-        markerBuilder: (cluster) => markerBuilder(cluster, setDoctorDetail),
+        markerBuilder: (cluster) => markerBuilder(
+          cluster,
+          setDoctorDetail,
+          setActiveDoctors,
+          currHealthcareProviders,
+          onMoveMapFilteringBlocked,
+          applyFilter,
+        ),
       );
 
   void setVisibleRegion(LatLngBounds latLngBounds) {
     if (visibleRegion != latLngBounds) {
       visibleRegion = latLngBounds;
-      _applyFilter();
+      applyFilter();
       notifyListeners();
     }
   }
@@ -59,7 +72,8 @@ class MapStateService with ChangeNotifier {
   void addAll(Iterable<SimpleHealthcareProvider> healthcareProviders) {
     _allHealthcareProviders.addAll(healthcareProviders);
     clusterManager.setItems(allHealthcareProviders.map((e) => HealthcareItemPlace(e)).toList());
-    _applyFilter();
+    applyFilter();
+    _setSpecializations();
     notifyListeners();
   }
 
@@ -84,13 +98,13 @@ class MapStateService with ChangeNotifier {
         uniqueCitiesMap[healthcareProvider.city] = healthcareProvider;
       }
 
-      bool matchesQuery(String specialization) =>
+      bool matchesSpecQuery(String specialization) =>
           removeDiacritics(specialization).toLowerCase().contains(normalizedQuery);
       final specializations = healthcareProvider.category;
       final hasSpecializationMatch =
-          specializations.isNotEmpty ? specializations.any(matchesQuery) : false;
+          specializations.isNotEmpty ? specializations.any(matchesSpecQuery) : false;
       if (hasSpecializationMatch) {
-        final matchedSpecs = specializations.where(matchesQuery);
+        final matchedSpecs = specializations.where(matchesSpecQuery);
         for (final spec in matchedSpecs) {
           uniqueSpecializationsMap[spec] = healthcareProvider;
         }
@@ -138,7 +152,51 @@ class MapStateService with ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyFilter() {
+  SearchResult? getSpecSearchResultByName(String specName) {
+    final matched = _allHealthcareProviders.firstWhereOrNull(
+      (e) => e.category.any(
+        (spec) =>
+            removeDiacritics(spec).toLowerCase().contains(removeDiacritics(specName.toLowerCase())),
+      ),
+    );
+    if (matched != null) {
+      return SearchResult(
+        data: matched,
+        searchType: SearchType.specialization,
+        overriddenText: specName,
+      );
+    }
+    return null;
+  }
+
+  void _setSpecializations() {
+    final uniqueSpecializationsMap = <String, SearchResult>{};
+    for (final healthcareProvider in _allHealthcareProviders) {
+      final specializations = healthcareProvider.category;
+      for (final spec in specializations) {
+        uniqueSpecializationsMap[spec] = SearchResult(
+          data: healthcareProvider,
+          searchType: SearchType.specialization,
+          overriddenText: spec,
+        );
+      }
+    }
+    _allSpecs.replaceRange(0, _allSpecs.length, uniqueSpecializationsMap.values);
+  }
+
+  void applyFilter() {
+    if (onMoveMapFilteringBlocked) {
+      final firstProvider = currHealthcareProviders.firstOrNull;
+      if (firstProvider != null && visibleRegion != null) {
+        final isProviderInCurrRegion =
+            visibleRegion!.contains(LatLng(firstProvider.lat, firstProvider.lng));
+        if (isProviderInCurrRegion) {
+          // filtering on map move is blocked - clicked on a cluster
+          return;
+        }
+      }
+    }
+    onMoveMapFilteringBlocked = false;
     _currHealthcareProviders.replaceRange(
       0,
       _currHealthcareProviders.length,
@@ -153,8 +211,18 @@ class MapStateService with ChangeNotifier {
     );
   }
 
-  void setDoctorDetail(SimpleHealthcareProvider? detail) {
+  void setDoctorDetail(SimpleHealthcareProvider? detail, {bool unblockOnMoveMapFiltering = true}) {
+    if (unblockOnMoveMapFiltering) {
+      onMoveMapFilteringBlocked = false;
+    }
     doctorDetail = detail;
+    notifyListeners();
+  }
+
+  void setActiveDoctors(Iterable<SimpleHealthcareProvider> newProviders) {
+    onMoveMapFilteringBlocked = true;
+    doctorDetail = null;
+    _currHealthcareProviders.replaceRange(0, _currHealthcareProviders.length, newProviders);
     notifyListeners();
   }
 

@@ -14,7 +14,8 @@ extension ExaminationPreventionStatusExt on ExaminationPreventionStatus {
     final now = dateTimeNow ?? DateTime.now();
 
     // STATUS: waiting or newToSchedule
-    if (state == ExaminationStatus.CONFIRMED && lastConfirmedDate != null) {
+    if (([ExaminationStatus.CONFIRMED, ExaminationStatus.UNKNOWN].contains(state)) &&
+        lastConfirmedDate != null) {
       final lastVisitDateTime = lastConfirmedDate!.toLocal();
       final lastVisitDateWithoutDay = DateTime(lastVisitDateTime.year, lastVisitDateTime.month);
 
@@ -32,7 +33,7 @@ extension ExaminationPreventionStatusExt on ExaminationPreventionStatus {
       return const ExaminationCategory.waiting();
     }
 
-    if (state == ExaminationStatus.UNKNOWN || state == ExaminationStatus.CANCELED) {
+    if ([ExaminationStatus.UNKNOWN, ExaminationStatus.CANCELED].contains(state)) {
       return const ExaminationCategory.newToSchedule();
     }
 
@@ -86,7 +87,7 @@ extension CategorizedExaminationListExt on List<CategorizedExamination> {
     if (isEmpty) return;
     first.category.whenOrNull(
       scheduledSoonOrOverdue: () =>
-          sort((a, b) => b.examination.plannedDate!.compareTo(a.examination.plannedDate!)),
+          sort((a, b) => a.examination.plannedDate!.compareTo(b.examination.plannedDate!)),
       newToSchedule: () => sort((a, b) {
         if (a.examination.lastConfirmedDate == null || b.examination.lastConfirmedDate == null) {
           return -1;
