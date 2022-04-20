@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:auto_route/auto_route.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:loono/l10n/ext.dart';
 import 'package:loono/repositories/user_repository.dart';
+import 'package:loono/router/app_router.gr.dart';
 import 'package:loono/services/examinations_service.dart';
 import 'package:loono/services/webview_service.dart';
 import 'package:loono/ui/screens/about_health/about_health.dart';
@@ -98,40 +100,70 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async {
-        final webViewController = context.read<WebViewProvider>().webViewController;
-        if (_selectedIndex == 2 &&
-            webViewController != null &&
-            await webViewController.canGoBack()) {
-          await webViewController.goBack();
-        }
-        return false;
-      },
-      child: Scaffold(
-        body: _pages.elementAt(_selectedIndex),
-        bottomNavigationBar: CustomNavigationBar(
-          key: const Key('mainScreenPage_bottomNavBar'),
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
-          items: [
-            CustomNavigationBarItem(
-              label: context.l10n.main_menu_item_prevention,
-              iconPath: 'assets/icons/tabs/prevention.svg',
-              iconPathActive: 'assets/icons/tabs/prevention_active.svg',
-            ),
-            CustomNavigationBarItem(
-              label: context.l10n.main_menu_item_find_doc,
-              iconPath: 'assets/icons/tabs/find_doctor.svg',
-              iconPathActive: 'assets/icons/tabs/find_doctor_active.svg',
-            ),
-            CustomNavigationBarItem(
-              label: context.l10n.main_menu_item_about_health,
-              iconPath: 'assets/icons/tabs/explore.svg',
-              iconPathActive: 'assets/icons/tabs/explore_active.svg',
-            ),
+        onWillPop: () async {
+          final webViewController = context.read<WebViewProvider>().webViewController;
+          if (_selectedIndex == 2 &&
+              webViewController != null &&
+              await webViewController.canGoBack()) {
+            await webViewController.goBack();
+          }
+          return false;
+        },
+        // child: Scaffold(
+        //   body: _pages.elementAt(_selectedIndex),
+        //   bottomNavigationBar: CustomNavigationBar(
+        //     key: const Key('mainScreenPage_bottomNavBar'),
+        //     currentIndex: _selectedIndex,
+        //     onTap: _onItemTapped,
+        //     items: [
+        //       CustomNavigationBarItem(
+        //         label: context.l10n.main_menu_item_prevention,
+        //         iconPath: 'assets/icons/tabs/prevention.svg',
+        //         iconPathActive: 'assets/icons/tabs/prevention_active.svg',
+        //       ),
+        //       CustomNavigationBarItem(
+        //         label: context.l10n.main_menu_item_find_doc,
+        //         iconPath: 'assets/icons/tabs/find_doctor.svg',
+        //         iconPathActive: 'assets/icons/tabs/find_doctor_active.svg',
+        //       ),
+        //       CustomNavigationBarItem(
+        //         label: context.l10n.main_menu_item_about_health,
+        //         iconPath: 'assets/icons/tabs/explore.svg',
+        //         iconPathActive: 'assets/icons/tabs/explore_active.svg',
+        //       ),
+        //     ],
+        //   ),
+        // ),
+        child: AutoTabsScaffold(
+          routes: [
+            FindDoctorRoute(),
+            AboutHealthRoute(),
           ],
-        ),
-      ),
-    );
+          bottomNavigationBuilder: (_, tabsRouter) {
+            // TODO: unify widgets with Post-auth MainScreen
+
+            return CustomNavigationBar(
+              currentIndex: tabsRouter.activeIndex,
+              onTap: (index) async {
+                await registry
+                    .get<FirebaseAnalytics>()
+                    .setCurrentScreen(screenName: analyticsTabNames[index]);
+                tabsRouter.setActiveIndex(index);
+              },
+              items: [
+                CustomNavigationBarItem(
+                  label: context.l10n.main_menu_item_find_doc,
+                  iconPath: 'assets/icons/tabs/find_doctor.svg',
+                  iconPathActive: 'assets/icons/tabs/find_doctor_active.svg',
+                ),
+                CustomNavigationBarItem(
+                  label: context.l10n.main_menu_item_about_health,
+                  iconPath: 'assets/icons/tabs/explore.svg',
+                  iconPathActive: 'assets/icons/tabs/explore_active.svg',
+                ),
+              ],
+            );
+          },
+        ));
   }
 }

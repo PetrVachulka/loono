@@ -54,6 +54,8 @@ import 'package:loono/ui/screens/settings/photo_cropped_result.dart';
 import 'package:loono/ui/screens/welcome.dart';
 import 'package:loono/ui/widgets/achievement_screen.dart';
 
+import '../ui/screens/prevention/prevention.dart';
+
 const _onboardingTransition = TransitionsBuilders.slideLeft;
 const _preventionTransition = TransitionsBuilders.slideLeft;
 const _findDoctorTransition = TransitionsBuilders.slideLeft;
@@ -105,7 +107,9 @@ const _postAuthRouter = AutoRoute<void>(
   initial: true,
   guards: [CheckIsLoggedIn],
   children: [
-    AutoRoute<void>(page: MainScreen, path: ''),
+    AutoRoute<void>(page: MainScreen, path: '', children: [
+      AutoRoute<void>(page: PreventionScreen, path: 'prevention')
+    ]),
     ..._settingsRoutes,
     ..._preventionRoutes,
     ..._selfExaminationRoutes,
